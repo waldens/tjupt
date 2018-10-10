@@ -300,6 +300,13 @@ width:14px;
 height:14px;
 background:url(icons.gif) -42px -68px;
 }
+
+img.dt_transmit {
+	width: 14px;
+	height: 14px;
+	background: url(icons.gif) 0 -68px;
+}
+
 img.faq_new
 {
 width:40px;

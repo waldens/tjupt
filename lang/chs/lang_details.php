@@ -293,6 +293,8 @@ $lang_details = array
 	'row_download_direct_link' => "种子链接",
     'text_press_to_copy' => "点我复制",
     'text_direct_link_warning' => "<font color='red'>注意：链接中包含passkey，切勿泄露！</font>",
+	'text_ask_for_transmit' => "种子中转",
+    'title_ask_for_transmit' => "当校外/校内或IPv4/IPv6连接性不佳时请求中转",
 );
 
 ?>
