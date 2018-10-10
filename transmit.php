@@ -7,6 +7,7 @@
  */
 require "include/bittorrent.php";
 dbconn();
+require_once(get_langfile_path());
 loggedinorreturn();
 global $CURUSER;
 
@@ -16,14 +17,14 @@ if ($action == '') {
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
     check_permission();
-    $res = sql_query("SELECT id, tid, status, seeding_time FROM transmit WHERE status != 'complete'");
+    $res = sql_query("SELECT id, tid, status, seeding_time FROM transmit WHERE status != 'complete'") or sqlerr();
     $torrents = array();
     while ($row = mysql_fetch_assoc($res)) {
         $torrent = new TorrentAction();
         if ($row['status'] == "pending") {
             $torrent->setAction("start");
         } else if ($row['status'] == "seeding") {
-            if (strtotime('+7 day', $row['seeding_time']) < strtotime("now")) {
+            if (strtotime('+7 day', strtotime($row['seeding_time'])) < strtotime("now")) {
                 $torrent->setAction("stop");
             } else {
                 continue;
@@ -42,35 +43,37 @@ if ($action == '') {
     $ids = "(" . $_GET['id'] . ")";
     $torrents = array();
     sql_query("UPDATE transmit SET status = 'downloading' WHERE id IN " . $ids);
+    echo 'ok';
 } else if ($action == 'ok') {
     check_permission();
     // https://tjupt.org/transmit.php?id=1,2,3,4,5,6,7,8
     $ids = "(" . $_GET['id'] . ")";
     $torrents = array();
-    sql_query("UPDATE transmit SET status = 'seedingUPDATE transmit SET status = 'downloading' WHERE id IN ', seeding_time = NOW() WHERE id IN " . $ids);
+    sql_query("UPDATE transmit SET status = 'seeding', seeding_time = NOW() WHERE id IN " . $ids) or sqlerr();
+    echo 'ok';
 } else if ($action == 'request') {
     if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $id = $_POST['id'];
         if (!is_numeric($id)) {
-            stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id']);
+            stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id'] . $id);
         }
         $id = 0 + $id;
-        $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id"));
+        $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id")) or sqlerr();
         $cost = calculate_cost($torrent['size']);
         if ($CURUSER['seedbonus'] < $cost) {
             stderr($lang_transmit['std_error'], $lang_transmit['std_not_enough_bonus']);
         }
         sql_query("INSERT INTO transmit (tid, uid) VALUES (" . $CURUSER['id'] . ", $id)");
         sql_query("UPDATE users SET seedbonus = seedbonus - $cost WHERE id = " . $CURUSER['id']);
-        write_log($CURUSER['username'] . "使用了$cost 请求中转种子($id)" . $torrent['name']);
-        stdmsg($lang_transmit['std_success'], $lang_transmit['text_success_note']);
+        write_log($CURUSER['username'] . $lang_transmit['text_use'] . $cost . $lang_transmit['text_bonus_to_request_transmit'] . "($id)" . $torrent['name']);
+        stderr($lang_transmit['std_success'], $lang_transmit['text_success_note']);
     } else {
         $id = $_GET['id'];
         if (!is_numeric($id)) {
-            stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id']);
+            stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id'] . $id);
         }
         $id = 0 + $id;
-        $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id"));
+        $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id")) or sqlerr();
         if ($torrent['transmit'] == 'yes') {
             stderr($lang_transmit['std_error'], $lang_transmit['std_already_transmit']);
         }
@@ -79,7 +82,7 @@ if ($action == '') {
             stderr($lang_transmit['std_error'], $lang_transmit['std_not_enough_bonus']);
         }
         $confirm = $lang_transmit['text_you_are_using'] . $cost . $lang_transmit['text_bonus_to_request_transmit'] . "<a href='details.php?id=$id&hit=1' title='" . $torrent['name'] . "'>" . $torrent['name'] . "</a>";
-        stdmsg($lang_transmit['std_be_sure'], "<form action=\"?action=request\" method=\"post\"><input type=\"hidden\" name=\"torrent\" value=" . $id . " />" . $confirm . "<br /><input type=submit value=\"确定\"> &nbsp;<input type=button value=\"返回\" onclick=\"location.href='javascript:history.go(-1)'\" /></form>", 0);
+        stderr($lang_transmit['std_be_sure'], "<form action=\"?action=request\" method=\"post\"><input type=\"hidden\" name=\"id\" value=" . $id . " />" . $confirm . "<br /><input type=submit value=\"确定\"> &nbsp;<input type=button value=\"返回\" onclick=\"location.href='javascript:history.go(-1)'\" /></form>", 0);
     }
 }
 
@@ -93,7 +96,7 @@ function check_permission()
 
 function calculate_cost($size)
 {
-    return $cost = $size / 2000000;
+    return $cost = round($size / 2000000, 1);
 }
 
 class TorrentAction
