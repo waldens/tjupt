@@ -1625,8 +1625,8 @@ function begin_compose($title = "", $type = "new", $body = "", $hassubject = tru
 function end_compose() {
 	global $lang_functions;
 	print ("<tr><td colspan=\"2\" align=\"center\"><table><tr><td class=\"embedded\"><input id=\"qr\" type=\"submit\" class=\"btn\" value=\"" . $lang_functions ['submit_submit'] . "\" /></td><td class=\"embedded\">") ;
-	print ("<input type=\"button\" class=\"btn2\" name=\"previewbutton\" id=\"previewbutton\" value=\"" . $lang_functions ['submit_preview'] . "\" onclick=\"javascript:preview(this.parentNode);\" />") ;
-	print ("<input type=\"button\" class=\"btn2\" style=\"display: none;\" name=\"unpreviewbutton\" id=\"unpreviewbutton\" value=\"" . $lang_functions ['submit_edit'] . "\" onclick=\"javascript:unpreview(this.parentNode);\" />") ;
+	print ("<input type=\"button\" class=\"btn\" name=\"previewbutton\" id=\"previewbutton\" value=\"" . $lang_functions ['submit_preview'] . "\" onclick=\"javascript:preview(this.parentNode);\" />") ;
+	print ("<input type=\"button\" class=\"btn\" style=\"display: none;\" name=\"unpreviewbutton\" id=\"unpreviewbutton\" value=\"" . $lang_functions ['submit_edit'] . "\" onclick=\"javascript:unpreview(this.parentNode);\" />") ;
 	print ("</td></tr></table>") ;
 	print ("</td></tr>") ;
 	print ("</table>\n") ;
@@ -6566,4 +6566,25 @@ function update_torrent_connectable()
         
         sql_query("UPDATE torrents SET connectable = " . sqlesc($connectable) . " WHERE id = " . sqlesc($id)) or sqlerr(__FILE__, __LINE__);
     }
+}
+
+/**
+ * 获取种子名
+ * @param $id
+ * @param bool $link
+ * @return string
+ */
+function get_torrent($id, $link = true)
+{
+    global $lang_functions;
+    if (!is_numeric($id)) {
+        return $lang_functions['text_torrent_id_invalid'];
+    }
+    $res = sql_query("SELECT name FROM torrents WHERE id = $id LIMIT 1") or sqlerr();
+    $torrent = mysql_fetch_assoc($res);
+    if ($torrent == false) {
+        return $lang_functions['text_torrent_not_found'];
+    }
+    $name = $torrent['name'];
+    return ($link ? "<a href='details.php?id=$id&hit=1' title='$name'>" : "") . $name . ($link ? "</a>" : "");
 }

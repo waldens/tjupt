@@ -1688,15 +1688,38 @@ function quick_reply_to(username)
 			}
 		
 		case "needtran" :
-			
-			{
-				
-				stdmsg ( "新功能开发中...", "该功能暂未开放，请过段时间再尝试。" );
-				
-				stdfoot ();
-				
-				die ();
-			}
+            
+            {
+                $res = sql_query("SELECT * FROM transmit ORDER BY id DESC");
+                begin_table();
+                ?>
+                <tr>
+                    <td class="colhead" align="center"><?php echo $lang_req['col_transmit_user'] ?></td>
+                    <td class="colhead" align="center"><?php echo $lang_req['col_transmit_torrent'] ?></td>
+                    <td class="colhead" align="center"><?php echo $lang_req['col_transmit_remain_time'] ?></td>
+                    <td class="colhead" align="center"><?php echo $lang_req['col_transmit_status'] ?></td>
+                </tr>
+                <?php
+                while ($row = mysql_fetch_assoc($res)) {
+                    if ($row['status'] == "seeding") {
+                        $end_date = date('Y-m-d H:i:s', strtotime("+7 day", strtotime($row['seeding_time'])));
+                        $time = gettime($end_date, false, false, false, false, true);
+                    } else if ($row['status'] == "pending") {
+                        $time = $lang_req['text_transmit_not_yet'];
+                    }
+                    ?>
+                    <tr>
+                        <td class='rowfollow' align="center"><?php echo get_username($row['uid']) ?></td>
+                        <td class='rowfollow' align="center"><?php echo get_torrent($row['tid']) ?></td>
+                        <td class='rowfollow' align="center"><?php echo $time ?></td>
+                        <td class='rowfollow'
+                            align="center"><?php echo $lang_req['text_transmit_' . $row['status']] ?></td>
+                    </tr>
+                    <?php
+                }
+                end_table();
+                stdfoot();
+            }
 	}
 }
 

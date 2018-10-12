@@ -327,6 +327,8 @@ $lang_functions = array
     'no/no/yes' => "<font color='red'><i class='fa fa-close'></i>校内IPv4</font>&nbsp;&nbsp;<font color='red'><i class='fa fa-close'></i>IPv6</font>&nbsp;&nbsp;<font color='green'><i class='fa fa-check'></i>校外IPv4</font>",
     'no/no/-' => "<font color='red'><i class='fa fa-close'></i>校内IPv4</font>&nbsp;&nbsp;<font color='red'><i class='fa fa-close'></i>IPv6</font>&nbsp;&nbsp;<font color='#ff9000'><i class='fa fa-question'></i>校外IPv4</font>",
     'no/no/no' => "<font color='red'><i class='fa fa-close'></i>校内IPv4</font>&nbsp;&nbsp;<font color='red'><i class='fa fa-close'></i>IPv6</font>&nbsp;&nbsp;<font color='red'><i class='fa fa-close'></i>校外IPv4</font>",
+	'text_torrent_id_invalid' => "哎呀，种子ID不合法，请将这个情况报告给管理组。",
+	'text_torrent_not_found' => "咦？种子不存在！"
 );
 
 ?>
