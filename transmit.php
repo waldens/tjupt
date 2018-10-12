@@ -77,7 +77,8 @@ if ($action == '') {
             stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id'] . $id);
         }
         $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id")) or sqlerr();
-        $transmitted = mysql_fetch_assoc(sql_query("SELECT * FROM transmit WHERE tid = $id AND status != 'complete'")) or sqlerr();
+        $trans_res = sql_query("SELECT * FROM transmit WHERE tid = $id AND status != 'complete'") or sqlerr();
+        $transmitted = mysql_fetch_assoc($trans_res);
         if ($transmitted) {
             stderr($lang_transmit['std_error'], $lang_transmit['std_already_transmit']);
         }
