@@ -62,6 +62,7 @@ if ($action == '') {
         if (!is_numeric($id)) {
             stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id'] . $id);
         }
+        check_already_transmit($id);
         $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id")) or sqlerr();
         $cost = calculate_cost($torrent['size']);
         if ($CURUSER['seedbonus'] < $cost) {
@@ -76,12 +77,8 @@ if ($action == '') {
         if (!is_numeric($id)) {
             stderr($lang_transmit['std_error'], $lang_transmit['std_invalid_id'] . $id);
         }
+        check_already_transmit($id);
         $torrent = mysql_fetch_assoc(sql_query("SELECT name, size FROM torrents WHERE id = $id")) or sqlerr();
-        $trans_res = sql_query("SELECT * FROM transmit WHERE tid = $id AND status != 'complete'") or sqlerr();
-        $transmitted = mysql_fetch_assoc($trans_res);
-        if ($transmitted) {
-            stderr($lang_transmit['std_error'], $lang_transmit['std_already_transmit']);
-        }
         $cost = calculate_cost($torrent['size']);
         if ($CURUSER['seedbonus'] < $cost) {
             stderr($lang_transmit['std_error'], $lang_transmit['std_not_enough_bonus']);
@@ -102,6 +99,16 @@ function check_permission()
 function calculate_cost($size)
 {
     return $cost = round($size / 2000000, 1);
+}
+
+function check_already_transmit($id)
+{
+    global $lang_transmit;
+    $trans_res = sql_query("SELECT * FROM transmit WHERE tid = $id AND status != 'complete'") or sqlerr();
+    $transmitted = mysql_fetch_assoc($trans_res);
+    if ($transmitted) {
+        stderr($lang_transmit['std_error'], $lang_transmit['std_already_transmit']);
+    }
 }
 
 class TorrentAction
