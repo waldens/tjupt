@@ -1,6 +1,7 @@
 <?php
-require_once("include/benc.php");
 require_once("include/bittorrent.php");
+
+use OurBits\Bencode;
 
 dbconn();
 require_once(get_langfile_path());
@@ -11,7 +12,8 @@ ini_set("upload_max_filesize", $max_torrent_size);
 
 function bark($msg)
 {
-    genbark($msg, htmlspecialchars("上传失败！"));
+    global $lang_takeuploadoffer;
+    genbark($msg, $lang_takeuploadoffer ['std_upload_failed']);
     die ();
 }
 
@@ -19,12 +21,12 @@ if ($CURUSER ["uploadpos"] == 'no')
     die ();
 
 if (!isset ($_FILES ["file"]))
-    bark(htmlspecialchars("请填写必填项目"));
+    bark($lang_takeuploadoffer ['std_missing_form_data']);
 
 $f = $_FILES ["file"];
 $fname = $f ["name"];
 if (empty ($fname))
-    bark(htmlspecialchars("文件名不能为空！"));
+    bark($lang_takeuploadoffer ['std_empty_filename']);
 if (get_user_class() >= $beanonymous_class && $_POST ['uplver'] == 'yes') { // $_POST['uplver']
     // ==
     // 'yes'匿名发布;
@@ -43,15 +45,15 @@ if ($enablenfo_main == 'yes') { // NFO文件
     if ($nfofile ['name'] != '') {
 
         if ($nfofile ['size'] == 0)
-            bark(htmlspecialchars("NFO文件为空"));
+            bark($lang_takeuploadoffer['std_zero_byte_nfo']);
 
         if ($nfofile ['size'] > 65535)
-            bark(htmlspecialchars("NFO文件过大！最大允许65,535 bytes。"));
+            bark($lang_takeuploadoffer['std_nfo_too_big']);
 
         $nfofilename = $nfofile ['tmp_name'];
 
         if (@!is_uploaded_file($nfofilename))
-            bark(htmlspecialchars("NFO文件上传失败"));
+            bark($lang_takeuploadoffer['std_nfo_upload_failed']);
         $nfo = str_replace("\x0d\x0d\x0a", "\x0d\x0a", @file_get_contents($nfofilename));
     }
 }
@@ -66,139 +68,109 @@ $teamid = (0 + $_POST ["team_sel"]);
 $audiocodecid = (0 + $_POST ["audiocodec_sel"]);
 
 if (!validfilename($fname))
-    bark(htmlspecialchars("无效的文件名！"));
+    bark($lang_takeuploadoffer['std_invalid_filename']);
 if (!preg_match('/^(.+)\.torrent$/si', $fname, $matches))
-    bark(htmlspecialchars("无效的文件名(不是.torrent文件)."));
+    bark($lang_takeuploadoffer['std_filename_not_torrent']);
 $shortfname = $torrent = $matches [1];
 
 if ($f ['size'] > $max_torrent_size)
-    bark(htmlspecialchars("种子文件过大！最大允许") . number_format($max_torrent_size) . htmlspecialchars(" bytes。请使用更大的区块大小重新制作种子文件，或者将内容分为多个种子发布。"));
+    bark($lang_takeuploadoffer['std_torrent_file_too_big'] . number_format($max_torrent_size) . $lang_takeuploadoffer['std_remake_torrent_note']);
 $tmpname = $f ["tmp_name"];
 if (!is_uploaded_file($tmpname))
-    bark("eek");
+    bark($lang_takeupload ['std_missing_tmp_file']);
 if (!filesize($tmpname))
-    bark(htmlspecialchars("空文件！"));
-$dict = bdec_file($tmpname, $max_torrent_size);
-if (!isset ($dict))
-    bark(htmlspecialchars("你在搞什么鬼？你上传的不是Bencode文件！"));
-function dict_check($d, $s)
+    bark($lang_takeuploadoffer['std_empty_file']);
+$dict = Bencode::load($tmpname);
+
+function checkTorrentDict($dict, $key, $type = null)
 {
-    global $lang_takeuploadoffer;
-    if ($d ["type"] != "dictionary")
-        bark(htmlspecialchars("不是目录"));
-    $a = explode(":", $s);
-    $dd = $d ["value"];
-    $ret = array();
-    foreach ($a as $k) {
-        unset ($t);
-        if (preg_match('/^(.*)\((.*)\)$/', $k, $m)) {
-            $k = $m [1];
-            $t = $m [2];
+    global $lang_takeupload;
+
+    if (!is_array($dict)) bark($lang_takeupload['std_not_a_dictionary']);
+    $value = $dict[$key];
+    if (!$value && $value !== 0) bark($lang_takeupload['std_dictionary_is_missing_key']);
+    if (!is_null($type)) {
+        $isFunction = 'is_' . $type;
+        if (function_exists($isFunction) && !$isFunction($value)) {
+            bark($lang_takeupload['std_invalid_entry_in_dictionary']);
         }
-        if (!isset ($dd [$k]))
-            bark(htmlspecialchars("目录缺少值"));
-        if (isset ($t)) {
-            if ($dd [$k] ["type"] != $t)
-                bark(htmlspecialchars("无效的目录项"));
-            $ret [] = $dd [$k] ["value"];
-        } else
-            $ret [] = $dd [$k];
     }
-    return $ret;
+    return $value;
 }
 
-function dict_get($d, $k, $t)
-{
-    global $lang_takeuploadoffer;
-    if ($d ["type"] != "dictionary")
-        bark(htmlspecialchars("不是目录"));
-    $dd = $d ["value"];
-    if (!isset ($dd [$k]))
-        return;
-    $v = $dd [$k];
-    if ($v ["type"] != $t)
-        bark(htmlspecialchars("无效的目录项类型"));
-    return $v ["value"];
-}
-
-list ($ann, $info) = dict_check($dict, "announce(string):info");
-list ($dname, $plen, $pieces) = dict_check($info, "name(string):piece length(integer):pieces(string)");
+$info = checkTorrentDict($dict, 'info');
+$plen = checkTorrentDict($info, 'piece length', 'integer');  // Only Check without use
+$dname = checkTorrentDict($info, 'name', 'string');
+$pieces = checkTorrentDict($info, 'pieces', 'string');
 
 if (strlen($pieces) % 20 != 0)
-    bark(htmlspecialchars("无效的文件块"));
+    bark($lang_takeuploadoffer['std_invalid_pieces']);
 
+$totallen = $info['length'];
 $filelist = array();
-$totallen = dict_get($info, "length", "integer");
-if (isset ($totallen)) {
-    $filelist [] = array(
-        $dname,
-        $totallen
-    );
+if ($totallen) {
+    $filelist[] = [$dname, $totallen];
     $type = "single";
 } else {
-    $flist = dict_get($info, "files", "list");
-    if (!isset ($flist))
-        bark(htmlspecialchars("缺少长度和文件"));
-    if (!count($flist))
-        bark("no files");
+    $f_list = checkTorrentDict($info, 'files', 'array');
+    if (!isset($f_list)) bark($lang_takeupload['std_missing_length_and_files']);
+    if (!count($f_list)) bark("no files");
+
     $totallen = 0;
-    foreach ($flist as $fn) {
-        list ($ll, $ff) = dict_check($fn, "length(integer):path(list)");
+    foreach ($f_list as $fn) {
+        $ll = checkTorrentDict($fn, 'length', 'integer');
+        $path_key = isset($fn['path.utf-8']) ? 'path.utf-8' : 'path';
+        $ff = checkTorrentDict($fn, $path_key, 'list');
         $totallen += $ll;
-        $ffa = array();
+        $ffa = [];
         foreach ($ff as $ffe) {
-            if ($ffe ["type"] != "string")
-                bark(htmlspecialchars("文件名错误"));
-            $ffa [] = $ffe ["value"];
+            if (!is_string($ffe)) bark($lang_takeupload['std_filename_errors']);
+            $ffa[] = $ffe;
         }
-        if (!count($ffa))
-            bark(htmlspecialchars("文件名错误"));
+        if (!count($ffa)) bark($lang_takeupload['std_filename_errors']);
         $ffe = implode("/", $ffa);
-        $filelist [] = array(
-            $ffe,
-            $ll
-        );
+        $filelist[] = [$ffe, $ll];
     }
     $type = "multi";
 }
 
-$dict ['value'] ['announce'] = bdec(benc_str(get_protocol_prefix() . $announce_urls [0])); // change
-// announce
-// url
-// to
-// local
-$dict ['value'] ['info'] ['value'] ['private'] = bdec('i1e'); // add private
-// tracker
-// flag
-// 删除其他站点添加的标签
-if ($dict ['value'] ['created by'] == bdec(benc_str("hdchina.org"))) {
-    $dict ['value'] ['created by'] = bdec(benc_str("[$BASEURL]"));
-    $dict ['value'] ['comment'] = bdec(benc_str("Torrent From TJUPT"));
+// -- makePrivateTorrent --
+$dict['announce'] = get_protocol_prefix() . $announce_urls[0];  // change announce url to local
+$dict['info']['private'] = 1;
+
+// Remove un-need field in the torrent
+if ($dict['created by'] == "hdchina.org") {
+    $dict['created by'] = "[$BASEURL]";
+    $dict['comment'] = "Torrent From TJUPT";
 }
-if ($dict ['value'] ['created by'] == bdec(benc_str("http://cgbt.org"))) {
-    $dict ['value'] ['created by'] = bdec(benc_str("[$BASEURL]"));
-    $dict ['value'] ['comment'] = bdec(benc_str("Torrent From TJUPT"));
+if ($dict['created by'] == "http://cgbt.org") {
+    $dict['created by'] = "[$BASEURL]";
+    $dict['comment'] = "Torrent From TJUPT";
 }
-if (isset ($dict ['value'] ['info'] ['value'] ['ttg_tag'])) {
-    unset ($dict ['value'] ['info'] ['value'] ['ttg_tag']);
-    $dict ['value'] ['created by'] = bdec(benc_str("[$BASEURL]"));
-    $dict ['value'] ['comment'] = bdec(benc_str("Torrent From TJUPT"));
+if (isset ($dict['info']['ttg_tag'])) {
+    unset ($dict['info']['ttg_tag']);
+    $dict['created by'] = "[$BASEURL]";
+    $dict['comment'] = "Torrent From TJUPT";
 }
 // The following line requires uploader to re-download torrents after uploading
 // even the torrent is set as private and with uploader's passkey in it.
-$dict ['value'] ['info'] ['value'] ['source'] = bdec(benc_str("[$BASEURL] $SITENAME"));
-unset ($dict ['value'] ['announce-list']); // remove multi-tracker capability
-unset ($dict ['value'] ['nodes']); // remove cached peers (Bitcomet & Azareus)
-$dict = bdec(benc($dict)); // double up on the becoding solves the
-// occassional
-// misgenerated infohash
-list ($ann, $info) = dict_check($dict, "announce(string):info");
+$dict['info']['source'] = "[$BASEURL] $SITENAME";
+unset ($dict['announce-list']); // remove multi-tracker capability
+unset ($dict['nodes']); // remove cached peers (Bitcomet & Azareus)
 
-$infohash = pack("H*", sha1($info ["string"]));
-function hex_esc2($matches)
-{
-    return sprintf("%02x", ord($matches [0]));
+// Clean The `info` dict
+$allowed_keys = [
+    'files', 'name', 'piece length', 'pieces', 'private', 'length',
+    'name.utf8', 'name.utf-8', 'md5sum', 'sha1', 'source',
+    'file-duration', 'file-media', 'profiles'
+];
+foreach ($dict['info'] as $key => $value) {
+    if (!in_array($key, $allowed_keys)) {
+        unset($dict['info'][$key]);
+    }
 }
+
+$infohash = pack("H*", sha1(Bencode::encode($dict['info'])));
 
 // ------------- start: check upload authority ------------------//
 $allowtorrents = user_can_upload("torrents");
@@ -208,15 +180,12 @@ $catmod = 4;
 $offerid = $_POST ['offer'];
 
 if ($offerid == 0)
-    bark(htmlspecialchars("请选择一个候选！"));
+    bark($lang_takeuploadoffer['std_please_choose_a_offer']);
 
 $is_offer = false;
-if ($browsecatmode != $specialcatmode && $catmod == $specialcatmode) { // upload
-    // to
-    // special
-    // section
+if ($browsecatmode != $specialcatmode && $catmod == $specialcatmode) { // upload to special section
     if (!$allowspecial)
-        bark(htmlspecialchars("你没有自由上传的权限！"));
+        bark($lang_takeuploadoffer['std_unauthorized_upload_freely']);
 } elseif ($catmod == $browsecatmode) { // upload to torrents section
     if ($offerid) { // it is a offer
         $allowed_offer_count = get_row_count("offers", "WHERE allowed='allowed' AND userid=" . sqlesc($CURUSER ["id"]));
@@ -224,19 +193,17 @@ if ($browsecatmode != $specialcatmode && $catmod == $specialcatmode) { // upload
             $allowed_offer = get_row_count("offers", "WHERE id=" . sqlesc($offerid) . " AND allowed='allowed' AND userid=" . sqlesc($CURUSER ["id"]));
             if ($allowed_offer != 1) // user uploaded torrent that is not an
                 // allowed offer
-                bark(htmlspecialchars("你只能上传通过候选的种子，请返回在<b>你的候选</b>中选择合适项目后再上传！"));
+                bark($lang_takeuploadoffer['std_uploaded_not_offered']);
             else
                 $is_offer = true;
         } else
-            bark(htmlspecialchars("你只能上传通过候选的种子，请返回在<b>你的候选</b>中选择合适项目后再上传！"));
+            bark($lang_takeuploadoffer['std_uploaded_not_offered']);
     } elseif (!$allowtorrents)
-        bark(htmlspecialchars("你没有自由上传的权限！"));
+        bark($lang_takeuploadoffer['std_unauthorized_upload_freely']);
 } else // upload to unknown section
     die ("Upload to unknown section.");
 
-if ($largesize_torrent && $totallen > ($largesize_torrent * 1073741824)) // Large
-    // Torrent
-    // Promotion
+if ($largesize_torrent && $totallen > ($largesize_torrent * 1073741824)) // Large Torrent Promotion
 {
     switch ($largepro_torrent) {
         case 2 : // Free
@@ -466,13 +433,9 @@ foreach ($filelist as $file) {
         $notoffer = 1;
 }
 if (count($errfile)) {
-    stdhead();
     if ($notoffer) {
-        stdmsg("上传失败！", "您发布的种子内包含不符合发布要求的文件。<br/>如果它们是你要发布的<b>主要文件</b>，可能相应<a href='rules.php#rules_upload' class='faqlink'>规则</a>不允许发布这类格式文件，请不要尝试转换格式发布。如果您坚持认为该文件可以发布，请联系管理员。<br/>下列文件不符合发布要求：<p>" . join("<br/>", $errfile) . "</p>");
-        stdfoot();
-        die();
-    } else
-        stdmsg("上传失败！", "您的简介已经被转为候选，因为您发布的种子内包含不符合发布要求的文件。<br/>如果它们是种子内的<b>附带文件</b>，请将其删除后再重新制作种子上传；<br/>如果它们是<b>未下载完的ut临时文件</b>(!ut文件)，请将其下载完成后再重新制作种子上传。<br/>下列文件不符合发布要求：<p>" . join("<br/>", $errfile) . "</p>");
+        stderr($lang_takeuploadoffer ['std_upload_failed'], "您发布的种子内包含不符合发布要求的文件。<br/>如果它们是你要发布的<b>主要文件</b>，可能相应<a href='rules.php#rules_upload' class='faqlink'>规则</a>不允许发布这类格式文件，请不要尝试转换格式发布。如果您坚持认为该文件可以发布，请联系管理员。<br/>下列文件不符合发布要求：<p>" . join("<br/>", $errfile) . "</p>", false);
+    }
 }
 // end of my codes
 if (is_banned_title($offername, $catid)) {
@@ -510,11 +473,14 @@ while ($row = mysql_fetch_assoc($offerinfolist)) {
  * *********************************** end
  * 从offers和offersinfo中查出信息并存入torrents和torrentsinfo中***********************************
  */
-
+$exist_hash = sql_query("select id, info_hash from torrents where pulling_out = '0' AND " . hash_where("info_hash", $infohash));
+if ($arr = mysql_fetch_row($exist_hash)) {
+    stderr($lang_takeuploadoffer ['std_upload_failed'], $lang_takeuploadoffer ['std_torrent_existed'] . "<a href='details.php?id=" . $arr[0] . "&hit=1'><b>点此进入种子页</b></a>", false);
+}
 $ret = sql_query("INSERT INTO torrents (filename, owner, visible, anonymous, name, size, numfiles, type, url, small_descr, descr, ori_descr, category, source, medium, codec, audiocodec, standard, processing, team, save_as, sp_state, added, last_action, nfo, info_hash, sp_time) VALUES (" . sqlesc($fname) . ", " . sqlesc($CURUSER ["id"]) . ", 'yes', " . sqlesc($anonymous) . ", " . sqlesc($offername) . ", " . sqlesc($totallen) . ", " . count($filelist) . ", " . sqlesc($type) . ", " . sqlesc($url) . ", " . sqlesc($small_descr) . ", " . sqlesc($offerdescr) . ", " . sqlesc($descr) . ", " . sqlesc($catid) . ", " . sqlesc($sourceid) . ", " . sqlesc($mediumid) . ", " . sqlesc($codecid) . ", " . sqlesc($audiocodecid) . ", " . sqlesc($standardid) . ", " . sqlesc($processingid) . ", " . sqlesc($teamid) . ", " . sqlesc($dname) . ", " . sqlesc($sp_state) . ", " . sqlesc(date("Y-m-d H:i:s")) . ", " . sqlesc(date("Y-m-d H:i:s")) . ", " . sqlesc($nfo) . ", " . sqlesc($infohash) . ", " . sqlesc(date("Y-m-d H:i:s")) . ")");
 if (!$ret) {
     if (mysql_errno() == 1062)
-        bark(htmlspecialchars("该种子已存在！"));
+        bark($lang_takeuploadoffer ['std_torrent_existed']);
     bark("mysql puked: " . mysql_error());
     // bark("mysql puked: ".preg_replace_callback('/./s', "hex_esc2",
     // mysql_error()));
@@ -547,12 +513,8 @@ foreach ($filelist as $file) {
     @sql_query("INSERT INTO files (torrent, filename, size) VALUES ($id, " . sqlesc($file [0]) . "," . $file [1] . ")");
 }
 
-// move_uploaded_file($tmpname, "$torrent_dir/$id.torrent");
-$fp = fopen("$torrent_dir/$id.torrent", "w");
-if ($fp) {
-    @fwrite($fp, benc($dict), strlen(benc($dict)));
-    fclose($fp);
-}
+// 保存种子文件
+$dump_status = Bencode::dump("$torrent_dir/$id.torrent", $dict);
 
 // ===add karma
 KPS("+", $uploadtorrent_bonus, $CURUSER ["id"]);

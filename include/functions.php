@@ -3109,11 +3109,7 @@ print (" <a href=\"getrss.php\"><img class=\"rss\" alt=\"RSS\" title=\"" . $lang
 
                 function genbark($x, $y)
                 {
-                    stdhead($y);
-                    print ("<h1>" . htmlspecialchars($y) . "</h1>\n");
-                    print ("<p>" . htmlspecialchars($x) . "</p>\n");
-                    stdfoot();
-                    exit ();
+                    stderr($y, $x);
                 }
 
                 function mksecret($len = 20)
@@ -5793,7 +5789,6 @@ function check_password($password, $user_id = null)
 function youzan_request($method, $params = [], $files = [], $version = '3.0.0')
 {
     global $rootpath, $youzan_client_id, $youzan_client_secret, $youzan_kdt_id;
-    require($rootpath . '/vendor/autoload.php');
     $youzan = new \Hanson\Youzan\Youzan([
         'client_id' => $youzan_client_id,
         'client_secret' => $youzan_client_secret,
